@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Abel&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/comfy.js/dist/comfy.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Abel', sans-serif;
+  font-size: 20px;
+  color: #fffefe;
+}
+
+/* CONTENEDOR FLEX - igual que tu index.html */
+#chatContainer {
+  flex: 1;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* LOG - fluye de abajo hacia arriba dentro del flex */
+#log {
+  width: 100%;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* MENSAJE */
+.chatMsg {
+  position: relative;
+  margin-bottom: 4px;
+  animation: fadeIn 0.2s ease;
+  word-break: break-word;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.innerChat {
+  display: inline-block;
+  padding: 2px 8px;
+  position: relative;
+  word-break: break-word;
+  width: 100%;
+}
+
+.chatBg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  z-index: 0;
+}
+
+.meta {
+  position: relative;
+  z-index: 1;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message {
+  position: relative;
+  z-index: 1;
+  font-weight: 400;
+  word-wrap: break-word;
+}
+
+.badge {
+  display: inline-block;
+  height: 0.85em;
+  vertical-align: middle;
+  margin-right: 0.2em;
+  position: relative;
+  top: -0.1em;
+}
+
+.emote img {
+  height: 1.2em;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* PLATFORM DOTS */
+.platform-dot {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  margin-right: 0.3em;
+  vertical-align: middle;
+  position: relative;
+  top: -0.05em;
+}
+.dot-twitch  { background: #9146ff; }
+.dot-kick    { background: #53fc18; }
+.dot-tiktok  { background: #00f2ea; }
+.dot-youtube { background: #ff0000; }
+
+/* ALERT */
+.alert-msg .innerChat {
+  background: rgba(4, 255, 0, 0.15);
+  border-left: 3px solid #04ff00;
+  border-radius: 4px;
+}
+
+#heart-container {
+  position: fixed;
+  bottom: 10px;
+  width: 100%;
+  pointer-events: none;
+  z-index: 9999;
+}
+</style>
+</head>
+<body>
+
+<div id="heart-container"></div>
+
+<div id="chatContainer">
+  <div id="log"></div>
+</div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────
+const TWITCH_CHANNEL  = 'mariotq';
+const TIKTOK_USERNAME = '@mariotq';
+const KICK_CHANNEL    = 'mariotq';
+const MAX_MSGS        = 30;
+const IGNORED_USERS   = ['botrix','streamelements','kickbot','kicklet'];
+
+// ─── PLATFORM BADGE URLS ─────────────────────────────────
+const PLATFORM_BADGE = {
+  twitch:  'https://cdn.mrboostlive.com/twitchlogo.png',
+  kick:    'https://cdn.mrboostlive.com/kicklogo.png',
+  tiktok:  'https://cdn.streamelements.com/uploads/4a562bfd-b997-459f-8f9e-d9fe5370f522.png',
+  youtube: 'https://cdn.mrboostlive.com/youtubelogo.png'
+};
+
+function getPlatformBadge(platform) {
+  return '<img src="' + PLATFORM_BADGE[platform] + '" class="badge">';
+}
+
+// ─── DOM ─────────────────────────────────────────────────
+const log = document.getElementById('log');
+
+function escHtml(t) {
+  return String(t)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function addMessage(platform, username, message, color) {
+  if (IGNORED_USERS.includes(username.toLowerCase())) return;
+
+  const el = document.createElement('div');
+  el.className = 'chatMsg';
+  el.setAttribute('data-sender', username);
+
+  const nameColor = color || defaultColor(username);
+
+  el.innerHTML =
+    '<div class="innerChat">' +
+      '<div class="chatBg"></div>' +
+      '<span class="meta">' +
+        '<span style="color:' + nameColor + '">' +
+          getPlatformBadge(platform) +
+          '<span style="font-weight:700">' + escHtml(username) + '</span>' +
+          '<span style="opacity:0.5"> : </span>' +
+        '</span>' +
+      '</span>' +
+      '<span class="message">' + message + '</span>' +
+    '</div>';
+
+  log.appendChild(el);
+
+  // Limitar mensajes
+  while (log.children.length > MAX_MSGS) {
+    log.removeChild(log.firstChild);
+  }
+}
+
+function addAlert(name, text, color) {
+  const el = document.createElement('div');
+  el.className = 'chatMsg alert-msg';
+  el.innerHTML =
+    '<div class="innerChat">' +
+      '<span style="font-weight:700;color:' + (color||'#04ff00') + '">' + escHtml(name) + '</span>' +
+      '<span style="color:#fffefe"> ' + text + '</span>' +
+    '</div>';
+  log.appendChild(el);
+  while (log.children.length > MAX_MSGS) log.removeChild(log.firstChild);
+}
+
+function defaultColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return 'hsl(' + (Math.abs(h) % 360) + ',65%,72%)';
+}
+
+// ─── TWITCH (ComfyJS) ─────────────────────────────────────
+ComfyJS.Init(TWITCH_CHANNEL);
+
+ComfyJS.onChat = (user, message, flags, self, extra) => {
+  if (message.startsWith('!')) return;
+
+  // Procesar emotes de Twitch
+  let msgChars = [...message].map(c => escHtml(c));
+  let emotes = [];
+  for (let id of Object.keys(extra.messageEmotes || {})) {
+    for (let spot of extra.messageEmotes[id]) {
+      let [s, e] = spot.split('-');
+      emotes.push([parseInt(s), parseInt(e) - parseInt(s) + 1, id]);
+    }
+  }
+  emotes.sort(([a],[b]) => b - a);
+  emotes.forEach(([start, len, id]) => {
+    const img = '<img src="https://static-cdn.jtvnw.net/emoticons/v2/' + id + '/default/light/1.0" class="emote">';
+    msgChars.splice(start, len, img);
+  });
+
+  addMessage('twitch', user, msgChars.join(''), extra.userColor);
+};
+
+// ─── KICK ─────────────────────────────────────────────────
+let kickSubBadges = [];
+
+async function connectKick() {
+  try {
+    const r = await fetch('https://mrboostlive.com/kick/api/?channel=' + KICK_CHANNEL);
+    const d = await r.json();
+    const chatroomId = d.chatroom.id;
+    kickSubBadges = (d.subscriber_badges || []).sort((a,b) => a.months - b.months);
+
+    const ws = new WebSocket('wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=7.6.0&flash=false');
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        event: 'pusher:subscribe',
+        data: { auth: '', channel: 'chatrooms.' + chatroomId + '.v2' }
+      }));
+    };
+
+    ws.onmessage = ({ data }) => {
+      try {
+        const j = JSON.parse(data);
+        const sub = JSON.parse(j.data || '{}');
+
+        if (j.event === 'App\\Events\\ChatroomClearEvent') {
+          log.innerHTML = '';
+          return;
+        }
+        if (j.event === 'App\\Events\\UserBannedEvent') {
+          document.querySelectorAll('.chatMsg[data-sender="' + sub.user?.username + '"]').forEach(e => e.remove());
+          return;
+        }
+        if (j.event === 'App\\Events\\SubscriptionEvent' && sub.username) {
+          addAlert(sub.username, 'Sub x' + sub.months, '#53fc18');
+          return;
+        }
+
+        if (sub.type !== 'message' && sub.type !== 'reply') return;
+        if (IGNORED_USERS.includes((sub.sender?.username||'').toLowerCase())) return;
+        if ((sub.content||'').startsWith('!')) return;
+
+        const color = sub.sender?.identity?.color || null;
+        let msg = (sub.content || '')
+          .replace(/\[emote:(\d+):?[^\]]*\]/g, '<img src="https://files.kick.com/emotes/$1/fullsize" class="emote">')
+          .replace(/\[emoji:(\w+)\]/g, '<img src="https://dbxmjjzl5pc1g.cloudfront.net/a984b19b-fb89-450b-b4c3-6e4fadd199c9/images/emojis/$1.png" class="emote">');
+
+        let username = sub.sender?.username || '';
+        if (sub.type === 'reply') username += ' → ' + sub.metadata?.original_sender?.username;
+
+        addMessage('kick', username, escHtml(msg), color);
+      } catch(e) {}
+    };
+
+    ws.onclose = () => setTimeout(connectKick, 3000);
+    ws.onerror = () => ws.close();
+
+  } catch(e) {
+    setTimeout(connectKick, 5000);
+  }
+}
+
+// ─── TIKTOK (Tikfinity → VPS fallback) ───────────────────
+const TIKFINITY  = 'ws://localhost:21213/';
+const TIKTOK_VPS = 'wss://vps.mrboostlive.com/tiktok';
+let tiktokSource = null;
+
+function handleTikTokMsg(ev) {
+  try {
+    const msg = JSON.parse(ev.data);
+    if (msg.event === 'chat' && msg.data) {
+      const { nickname, comment } = msg.data;
+      if (nickname && comment) {
+        const color = '#' + md5(nickname).substr(26);
+        addMessage('tiktok', nickname, escHtml(comment), color);
+      }
+    } else if (msg.event === 'follow') {
+      addAlert(msg.data?.nickname || '', 'New Follower', '#00f2ea');
+    } else if (msg.event === 'gift') {
+      addAlert(msg.data?.nickname || '', 'New Gift', '#00f2ea');
+    }
+  } catch(e) {}
+}
+
+function startTikTok() {
+  const tikfinity = new WebSocket(TIKFINITY);
+  tikfinity.addEventListener('open', () => {
+    tiktokSource = 'tikfinity';
+  });
+  tikfinity.addEventListener('message', ev => {
+    if (tiktokSource === 'tikfinity') handleTikTokMsg(ev);
+  });
+  tikfinity.addEventListener('close', () => {
+    if (tiktokSource === 'tikfinity') tiktokSource = null;
+    setTimeout(startTikTok, 5000);
+  });
+  tikfinity.addEventListener('error', () => {});
+
+  setTimeout(() => {
+    if (tiktokSource === 'tikfinity') return;
+    const vps = new WebSocket(TIKTOK_VPS);
+    vps.addEventListener('open', () => {
+      if (tiktokSource === 'tikfinity') { vps.close(); return; }
+      tiktokSource = 'vps';
+      vps.send(JSON.stringify({ tiktokUsername: TIKTOK_USERNAME }));
+    });
+    vps.addEventListener('message', ev => {
+      if (tiktokSource === 'vps') handleTikTokMsg(ev);
+    });
+    vps.addEventListener('close', () => {
+      if (tiktokSource === 'vps') tiktokSource = null;
+      setTimeout(() => { if (tiktokSource !== 'tikfinity') startTikTok(); }, 5000);
+    });
+    vps.addEventListener('error', () => {});
+  }, 2500);
+}
+
+// ─── INIT ─────────────────────────────────────────────────
+connectKick();
+startTikTok();
+</script>
+</body>
+</html>
